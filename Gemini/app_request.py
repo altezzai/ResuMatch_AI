@@ -1,8 +1,8 @@
 import requests
 import os
 
-# Flask API Base URL (update if hosted remotely)
-BASE_URL = "http://127.0.0.1:5000"  
+# Flask API Base URL (Update if hosted remotely)
+BASE_URL = "http://127.0.0.1:5000"
 
 def get_job_criteria(job_description):
     """
@@ -10,12 +10,13 @@ def get_job_criteria(job_description):
     """
     url = f"{BASE_URL}/get_job_criteria"
     data = {"job_description": job_description}
-    response = requests.post(url, json=data)
-    
-    if response.status_code == 200:
+
+    try:
+        response = requests.post(url, json=data)
+        response.raise_for_status()  # Raise an error for non-200 status codes
         return response.json()
-    else:
-        return {"error": f"Failed to fetch job criteria, Status Code: {response.status_code}", "details": response.text}
+    except requests.exceptions.RequestException as e:
+        return {"error": "Failed to fetch job criteria", "details": str(e)}
 
 def upload_cvs(cv_folder):
     """
@@ -23,22 +24,36 @@ def upload_cvs(cv_folder):
     """
     url = f"{BASE_URL}/upload_cvs"
     files = []
+    file_objects=[]
+
+    if not os.path.exists(cv_folder):
+        return {"error": f"Folder not found: {cv_folder}"}
     
-    for file_name in os.listdir(cv_folder):
-        if file_name.endswith(".pdf"):
+    pdf_files = [f for f in os.listdir(cv_folder) if f.endswith(".pdf")]
+    
+    if not pdf_files:
+        return {"error": "No PDF files found in the folder"}
+
+    try:
+        for file_name in pdf_files:
             file_path = os.path.join(cv_folder, file_name)
-            files.append(("cv_files", (file_name, open(file_path, "rb"), "application/pdf")))
+            file_obj = open(file_path, "rb")  # Open file
+            file_objects.append(file_obj)  # Store in list
+            files.append(("cv_files", (file_name, file_obj, "application/pdf")))
 
-    response = requests.post(url, files=files)
+        response = requests.post(url, files=files)
+        response.raise_for_status()  # Raise an error for non-200 status codes
 
-    # Close opened files
-    for _, file_obj in files:
-        file_obj[1].close()
-
-    if response.status_code == 200:
         return response.json()
-    else:
-        return {"error": f"Failed to upload CVs, Status Code: {response.status_code}", "details": response.text}
+    except requests.exceptions.RequestException as e:
+        return {"error": "Failed to upload CVs", "details": str(e)}
+
+
+    finally:
+        # Close all opened files after the request is sent
+        for file_obj in file_objects:
+            file_obj.close()
+
 
 if __name__ == "__main__":
     job_desc = "Looking for a Python Developer with expertise in Machine Learning, SQL, and Data Analysis."
@@ -46,7 +61,7 @@ if __name__ == "__main__":
     job_criteria = get_job_criteria(job_desc)
     print(job_criteria)
 
-    cv_folder_path =r"D:\deepseek\sampleCVs"  # Update with actual path
+    cv_folder_path = r"D:\deepseek\sampleCVs"
     print("Uploading CVs for analysis...")
     upload_response = upload_cvs(cv_folder_path)
     print(upload_response)

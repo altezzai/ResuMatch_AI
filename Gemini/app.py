@@ -111,24 +111,32 @@ def score_resume(extracted_data, job_keywords):
     total_score = sum(score_details.values())
     return total_score, score_details
 
+
 @app.route('/upload_cvs', methods=['POST'])
 def upload_cvs():
     if 'cv_files' not in request.files:
         return jsonify({'error': 'No CV files uploaded'}), 400
     
     files = request.files.getlist('cv_files')
+    
     if not files:
         return jsonify({'error': 'No CV files received'}), 400
+
+    uploaded_files = [file.filename for file in files]
     
-    job_keywords = ["python", "machine learning", "data analysis", "sql"]  # Example keywords (should be dynamic)
+    # Ensure directory exists
+    upload_folder = "uploaded_cvs"
+    if not os.path.exists(upload_folder):
+        os.makedirs(upload_folder)
+
+    # Example job keywords (should be dynamically retrieved)
+    job_keywords = ["python", "machine learning", "data analysis", "sql"]
+    
     ranked_candidates = []
-    
-    if not os.path.exists("uploaded_cvs"):
-        os.makedirs("uploaded_cvs")
-    
+
     for file in files:
         if file.filename.endswith(".pdf"):
-            file_path = os.path.join("uploaded_cvs", file.filename)
+            file_path = os.path.join(upload_folder, file.filename)
             file.save(file_path)
 
             text = extract_text_from_pdf(file_path)
@@ -140,9 +148,15 @@ def upload_cvs():
                 **score_details,
                 "Total Score": round(total_score, 2)
             })
-    
+
+    # Sort ranked candidates based on score
     ranked_candidates = sorted(ranked_candidates, key=lambda x: x["Total Score"], reverse=True)
-    return jsonify({"ranked_candidates": ranked_candidates}), 200
+
+    return jsonify({
+        "message": "CVs uploaded successfully",
+        "files": uploaded_files,
+        "ranked_candidates": ranked_candidates})
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000, debug=True)
+

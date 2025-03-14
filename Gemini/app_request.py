@@ -56,7 +56,7 @@ def upload_cvs(cv_folder):
 
 
 if __name__ == "__main__":
-    job_desc = "Looking for a Python Developer with expertise in Machine Learning, SQL, and Data Analysis."
+    job_desc = "Looking for a civil engineer with 2 years experience"
     print("Fetching Job Criteria...")
     job_criteria = get_job_criteria(job_desc)
     print(job_criteria)

@@ -16,15 +16,26 @@ def run_gemini_model(prompt):
     try:
         model = genai.GenerativeModel("gemini-1.5-pro")
         response = model.generate_content(prompt)
+
+        if not response or not response.text:
+            return {"error": "Empty response from Gemini API"}
+
         model_output = response.text.strip()
 
+        # Check if the response starts with code formatting (```) and clean it
         if model_output.startswith("```json"):
             model_output = model_output[7:-3].strip()
-        
+
+        # Attempt to parse JSON
         try:
             return json.loads(model_output)
         except json.JSONDecodeError as e:
-            return {"error": "Invalid JSON from Gemini", "details": str(e), "raw_output": model_output}
+            return {
+                "error": "Invalid JSON from Gemini",
+                "details": str(e),
+                "raw_output": model_output
+            }
+
     except Exception as e:
         return {"error": "Gemini API execution failed", "details": str(e)}
 
@@ -46,9 +57,11 @@ def determine_priority(job_description):
 @app.route('/get_job_criteria', methods=['POST'])
 def get_job_criteria():
     data = request.get_json()
-    if not data or 'job_description' not in data:
-        return jsonify({'error': 'Job description is missing'}), 400
-    job_description = data['job_description']
+    
+    if not data or 'job_description' not in data or not isinstance(data['job_description'], str) or not data['job_description'].strip():
+        return jsonify({'error': 'Job description is missing or invalid'}), 400
+
+    job_description = data['job_description'].strip()
     priority_mapping = determine_priority(job_description)
 
     prompt = f"""
@@ -56,13 +69,18 @@ def get_job_criteria():
     "{job_description}"
     Return a valid JSON object with the following keys: "Skills", "Education", "Experience", "Certifications", "Projects", "Other Relevant Criteria".
     """
-    
+
     criteria = run_gemini_model(prompt)
+
     if "error" in criteria:
         return jsonify(criteria), 500
-    
+
     final_criteria = {key: criteria.get(key, []) for key in priority_mapping.keys()}
-    prioritized_criteria = {key: {"priority": priority_mapping[key], "items": value} for key, value in final_criteria.items()}
+    prioritized_criteria = {
+        key: {"priority": priority_mapping[key], "items": value}
+        for key, value in final_criteria.items()
+    }
+
     return jsonify({'job_criteria': prioritized_criteria}), 200
 
 # Load spaCy NLP Model
@@ -118,20 +136,19 @@ def upload_cvs():
         return jsonify({'error': 'No CV files uploaded'}), 400
     
     files = request.files.getlist('cv_files')
+    data = request.form.to_dict()
+
+    # Example job keywords (should be dynamically retrieved)
+    job_keywords = json.loads(data.get("job_keywords", '["python", "machine learning", "data analysis", "sql"]'))
     
     if not files:
         return jsonify({'error': 'No CV files received'}), 400
-
-    uploaded_files = [file.filename for file in files]
     
     # Ensure directory exists
     upload_folder = "uploaded_cvs"
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)
+    os.makedirs(upload_folder, exist_ok=True)
 
-    # Example job keywords (should be dynamically retrieved)
-    job_keywords = ["python", "machine learning", "data analysis", "sql"]
-    
+
     ranked_candidates = []
 
     for file in files:
@@ -154,9 +171,7 @@ def upload_cvs():
 
     return jsonify({
         "message": "CVs uploaded successfully",
-        "files": uploaded_files,
         "ranked_candidates": ranked_candidates})
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000, debug=True)
-
